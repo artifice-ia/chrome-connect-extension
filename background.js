@@ -72,26 +72,47 @@ async function ensureRelayConnection() {
       )
     }
 
-    // Build WebSocket URL with token as query param
-    // (Browser WebSocket API does not support custom headers)
-    const separator = relayUrl.includes('?') ? '&' : '?'
-    const wsUrl = `${relayUrl}${separator}token=${encodeURIComponent(gatewayToken)}`
-
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(relayUrl)
     relayWs = ws
 
     await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('WebSocket connect timeout')), 5000)
+      const t = setTimeout(() => reject(new Error('WebSocket connect timeout')), 10000)
       let connected = false
       ws.onopen = () => {
-        clearTimeout(t)
         connected = true
-        // Install permanent handlers immediately on connect (before resolve)
-        // to close the race window where WS could drop between resolve and handler install
-        ws.onmessage = (event) => void onRelayMessage(String(event.data || ''))
-        ws.onclose = () => onRelayClosed('closed')
-        ws.onerror = () => onRelayClosed('error')
-        resolve()
+        // Send auth handshake — token never travels in the URL
+        ws.send(JSON.stringify({ method: 'auth', token: gatewayToken }))
+        // Temporary handlers for the auth phase
+        ws.onclose = (ev) => {
+          clearTimeout(t)
+          reject(new Error(`Closed during auth (${ev.code} ${ev.reason || 'no reason'})`))
+        }
+        ws.onerror = () => {
+          clearTimeout(t)
+          reject(new Error('Error during auth'))
+        }
+        ws.onmessage = (event) => {
+          let msg
+          try { msg = JSON.parse(String(event.data || '')) } catch { msg = null }
+          if (!msg || msg.method !== 'auth') {
+            clearTimeout(t)
+            ws.close()
+            reject(new Error('Unexpected message during auth'))
+            return
+          }
+          if (!msg.ok) {
+            clearTimeout(t)
+            ws.close()
+            reject(new Error(`Auth rejected: ${msg.error || 'unknown'}`))
+            return
+          }
+          clearTimeout(t)
+          // Auth confirmed — install permanent handlers
+          ws.onmessage = (event) => void onRelayMessage(String(event.data || ''))
+          ws.onclose = () => onRelayClosed('closed')
+          ws.onerror = () => onRelayClosed('error')
+          resolve()
+        }
       }
       ws.onerror = () => {
         clearTimeout(t)
