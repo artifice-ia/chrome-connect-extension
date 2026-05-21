@@ -81,7 +81,7 @@ async function ensureRelayConnection() {
       ws.onopen = () => {
         connected = true
         // Send auth handshake — token never travels in the URL
-        ws.send(JSON.stringify({ method: 'auth', token: gatewayToken }))
+        ws.send(JSON.stringify({ method: 'auth', token: gatewayToken, version: 1 }))
         // Temporary handlers for the auth phase
         ws.onclose = (ev) => {
           clearTimeout(t)
