@@ -26,6 +26,7 @@ const childSessionToTab = new Map()
 // ===== FIX #1 & #2: Auto-reconnect state =====
 let reconnectAttempt = 0
 let reconnectTimer = null
+let reconnectEpoch = 0
 
 function nowStack() {
   try {
@@ -150,6 +151,7 @@ async function ensureRelayConnection() {
     }
 
     // ===== FIX #2: Reset reconnect counter on successful connection =====
+    reconnectEpoch++
     reconnectAttempt = 0
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
@@ -167,6 +169,7 @@ async function ensureRelayConnection() {
 // ===== FIX #1: DON'T detach debugger sessions on WS drop =====
 function onRelayClosed(reason) {
   relayWs = null
+  reconnectEpoch++ // invalidate any in-flight reconnect callbacks from the previous cycle
 
   // Keep debugger attached — only update badge to show disconnected state.
   // When we reconnect, we'll re-announce existing sessions.
@@ -188,13 +191,16 @@ function onRelayClosed(reason) {
 
 function scheduleReconnect() {
   if (reconnectTimer) return // already scheduled
+  const epoch = reconnectEpoch
   const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000) + Math.random() * 500
   reconnectAttempt++
   console.log(`[Artífice Relay] Scheduling reconnect attempt ${reconnectAttempt} in ${Math.round(delay)}ms`)
 
   reconnectTimer = setTimeout(async () => {
+    if (epoch !== reconnectEpoch) { reconnectTimer = null; return } // superseded
     try {
       await ensureRelayConnection()
+      if (epoch !== reconnectEpoch) { reconnectTimer = null; return } // superseded during connect
       console.log('[Artífice Relay] Reconnected successfully')
 
       // Re-announce all still-attached tabs
