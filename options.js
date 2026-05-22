@@ -66,6 +66,13 @@ async function save() {
   const relayUrlInput = document.getElementById('relay-url-input')
   const tokenInput = document.getElementById('token')
   const relayUrl = normalizeRelayUrl(relayUrlInput.value)
+  try {
+    const parsed = new URL(relayUrl)
+    if (parsed.protocol !== 'wss:') throw new Error('not wss')
+  } catch {
+    setStatus('error', `Relay URL must start with wss:// (got: ${relayUrl})`)
+    return
+  }
   const token = String(tokenInput.value || '').trim()
   await chrome.storage.local.set({ relayUrl, gatewayToken: token })
   relayUrlInput.value = relayUrl

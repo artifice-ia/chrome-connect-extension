@@ -23,9 +23,6 @@ const tabBySession = new Map()
 /** @type {Map<string, number>} */
 const childSessionToTab = new Map()
 
-/** @type {Map<number, {resolve:(v:any)=>void, reject:(e:Error)=>void}>} */
-const pending = new Map()
-
 // ===== FIX #1 & #2: Auto-reconnect state =====
 let reconnectAttempt = 0
 let reconnectTimer = null
@@ -42,7 +39,14 @@ async function getRelayUrl() {
   const stored = await chrome.storage.local.get(['relayUrl'])
   const raw = String(stored.relayUrl || '').trim()
   if (!raw) return DEFAULT_RELAY_URL
-  return raw
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'wss:') throw new Error('not wss')
+    return raw
+  } catch {
+    console.warn(`[Artífice Relay] Invalid relayUrl in storage (must be wss://) — using default: ${raw}`)
+    return DEFAULT_RELAY_URL
+  }
 }
 
 async function getGatewayToken() {
@@ -148,10 +152,6 @@ async function ensureRelayConnection() {
 // ===== FIX #1: DON'T detach debugger sessions on WS drop =====
 function onRelayClosed(reason) {
   relayWs = null
-  for (const [id, p] of pending.entries()) {
-    pending.delete(id)
-    p.reject(new Error(`Relay disconnected (${reason})`))
-  }
 
   // Keep debugger attached — only update badge to show disconnected state.
   // When we reconnect, we'll re-announce existing sessions.
@@ -366,26 +366,6 @@ async function maybeOpenHelpOnce() {
   }
 }
 
-function requestFromRelay(command) {
-  const id = command.id
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (pending.delete(id)) reject(new Error(`Command ${id} timed out`))
-    }, 35000)
-    pending.set(id, {
-      resolve: (v) => { clearTimeout(timer); resolve(v) },
-      reject: (e) => { clearTimeout(timer); reject(e) },
-    })
-    try {
-      sendToRelay(command)
-    } catch (err) {
-      clearTimeout(timer)
-      pending.delete(id)
-      reject(err instanceof Error ? err : new Error(String(err)))
-    }
-  })
-}
-
 async function onRelayMessage(text) {
   /** @type {any} */
   let msg
@@ -401,15 +381,6 @@ async function onRelayMessage(text) {
     } catch {
       // ignore
     }
-    return
-  }
-
-  if (msg && typeof msg.id === 'number' && (msg.result !== undefined || msg.error !== undefined)) {
-    const p = pending.get(msg.id)
-    if (!p) return
-    pending.delete(msg.id)
-    if (msg.error) p.reject(new Error(String(msg.error)))
-    else p.resolve(msg.result)
     return
   }
 
@@ -589,6 +560,11 @@ async function handleForwardCdpCommand(msg) {
 
   if (method === 'Target.createTarget') {
     const url = typeof params?.url === 'string' ? params.url : 'about:blank'
+    let urlScheme
+    try { urlScheme = new URL(url).protocol } catch { urlScheme = null }
+    if (!urlScheme || !['http:', 'https:', 'about:'].includes(urlScheme)) {
+      throw new Error(`Target.createTarget: URL scheme not allowed`)
+    }
     const tab = await chrome.tabs.create({ url, active: false })
     if (!tab.id) throw new Error('Failed to create tab')
     await new Promise((r) => setTimeout(r, 100))
