@@ -39,11 +39,7 @@ async function checkRelayReachable(relayUrl, token) {
       method: 'HEAD',
       signal: ctrl.signal,
     })
-    if (res.status === 401) {
-      setStatus('error', 'Relay reachable but token was rejected. Check token and save again.')
-      return
-    }
-    // Any response (even 404) means the server is up
+    // Any response (even 401/404) means the server is up — we're not sending the token here
     setStatus('ok', `Relay reachable at ${relayUrl}`)
   } catch {
     // Public relays may not respond to HTTP HEAD — that's OK

@@ -79,11 +79,23 @@ async function ensureRelayConnection() {
       )
     }
 
+    // Close any lingering socket before opening a new one
+    if (relayWs && relayWs.readyState !== WebSocket.CLOSED) {
+      const stale = relayWs
+      stale.onclose = null
+      stale.onerror = null
+      try { stale.close() } catch {}
+    }
+    relayWs = null
+
     const ws = new WebSocket(relayUrl)
     relayWs = ws
 
     await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('WebSocket connect timeout')), 10000)
+      const t = setTimeout(() => {
+        ws.close()
+        reject(new Error('WebSocket connect timeout'))
+      }, 10000)
       let connected = false
       ws.onopen = () => {
         connected = true
@@ -288,6 +300,17 @@ async function restoreState() {
         }
       }
 
+      // Verify the tab still holds the same target — Chrome reuses tab IDs
+      const info = /** @type {any} */ (
+        await chrome.debugger.sendCommand({ tabId }, 'Target.getTargetInfo').catch(() => null)
+      )
+      const currentTargetId = String(info?.targetInfo?.targetId || '').trim()
+      if (targetId && currentTargetId && currentTargetId !== targetId) {
+        console.warn(`[Artífice Relay] Tab ${tabId} targetId changed (${targetId} → ${currentTargetId}) — dropping stale session`)
+        await chrome.debugger.detach({ tabId }).catch(() => {})
+        continue
+      }
+
       tabs.set(tabId, { state: 'connected', sessionId, targetId, attachOrder })
       tabBySession.set(sessionId, tabId)
       setBadge(tabId, 'on')
@@ -424,8 +447,8 @@ async function attachTab(tabId, opts = {}) {
     throw new Error('Target.getTargetInfo returned no targetId')
   }
 
-  const sessionId = `cb-tab-${nextSession++}`
   const attachOrder = nextSession
+  const sessionId = `cb-tab-${nextSession++}`
 
   tabs.set(tabId, { state: 'connected', sessionId, targetId, attachOrder })
   tabBySession.set(sessionId, tabId)
@@ -537,18 +560,20 @@ async function handleForwardCdpCommand(msg) {
   const sessionId = typeof msg?.params?.sessionId === 'string' ? msg.params.sessionId : undefined
 
   const bySession = sessionId ? getTabBySessionId(sessionId) : null
+  if (sessionId && !bySession) throw new Error(`Unknown sessionId: ${sessionId}`)
   const targetId = typeof params?.targetId === 'string' ? params.targetId : undefined
   const tabId =
     bySession?.tabId ||
     (targetId ? getTabByTargetId(targetId) : null) ||
     (() => {
+      const connected = []
       for (const [id, tab] of tabs.entries()) {
-        if (tab.state === 'connected') return id
+        if (tab.state === 'connected') connected.push(id)
       }
-      return null
+      return connected.length === 1 ? connected[0] : null
     })()
 
-  if (!tabId) throw new Error(`No attached tab for method ${method}`)
+  if (!tabId) throw new Error(`No attached tab for method ${method}${tabs.size > 1 ? ' — provide sessionId' : ''}`)
 
   /** @type {chrome.debugger.DebuggerSession} */
   const debuggee = { tabId }
