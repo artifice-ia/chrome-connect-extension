@@ -35,7 +35,7 @@ Trust perimeter: the host machine. The relay is not reachable from outside. The 
 
 ```
 Bot process
-    │  MCP / OpenClaw adapter
+    │  MCP adapter (or legacy plugin adapter)
     ▼
 Relay server (public endpoint, TLS)
     ↓  wss:// token-authenticated

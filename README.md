@@ -1,8 +1,8 @@
 # Chrome Connect Extension
 
-Chrome extension that gives your AI agent (Claude Code or OpenClaw) access to your browser via Chrome DevTools Protocol — with you in control of exactly which tabs are shared.
+Chrome extension that gives your AI agent access to your browser via Chrome DevTools Protocol — with you in control of exactly which tabs are shared. Pairs with any relay speaking the artifice-connect protocol, including the [chrome-connect-relay](https://github.com/artifice-ia/chrome-connect-relay) MCP server for Claude Code.
 
-Pair with [chrome-connect-relay](https://github.com/Agent-Crafting-Table/chrome-connect-relay) to get started.
+Pair with [chrome-connect-relay](https://github.com/artifice-ia/chrome-connect-relay) to get started.
 
 ## What your agent can do on shared tabs
 
@@ -31,7 +31,7 @@ The extension icon appears in your toolbar.
 
 ## Configure
 
-Before connecting, you need a relay running and a client token. Set up [chrome-connect-relay](https://github.com/Agent-Crafting-Table/chrome-connect-relay) first — it walks you through starting the relay and running the pair/redeem flow to get your `art_...` token.
+Before connecting, you need a relay running and a client token. Set up [chrome-connect-relay](https://github.com/artifice-ia/chrome-connect-relay) first — it walks you through starting the relay and running the pair/redeem flow to get your `art_...` token.
 
 Once you have the token:
 
@@ -42,7 +42,7 @@ Once you have the token:
 3. Paste your `art_...` token into **Client Token**.
 4. Click **Save**. The extension connects automatically.
 
-The indicator shows WebSocket state only — not whether your token is valid. To confirm the relay accepted your token, ask your agent to call `artifice_status` ([relay docs](https://github.com/Agent-Crafting-Table/chrome-connect-relay)).
+The indicator shows WebSocket state only — not whether your token is valid. To confirm the relay accepted your token, ask your agent to call `artifice_status` ([relay docs](https://github.com/artifice-ia/chrome-connect-relay)).
 
 ---
 
@@ -52,7 +52,7 @@ The indicator shows WebSocket state only — not whether your token is valid. To
 
 **Unshare a tab:** click the extension icon again and toggle sharing off.
 
-Your agent calls `artifice_status` to list shared tabs and their session IDs, then uses `artifice_cdp` to control them. See [chrome-connect-relay](https://github.com/Agent-Crafting-Table/chrome-connect-relay) for the full tool reference.
+Your agent calls `artifice_status` to list shared tabs and their session IDs, then uses `artifice_cdp` to control them. See [chrome-connect-relay](https://github.com/artifice-ia/chrome-connect-relay) for the full tool reference.
 
 > **What the agent can read:** On a shared tab, the agent has full JavaScript access — including `localStorage`, `sessionStorage`, cookies, form fields, and any auth tokens visible to the page. Only share tabs you're comfortable giving the agent complete access to.
 
